@@ -39,7 +39,7 @@ def test_network_error(monkeypatch):
     with pytest.raises(HTTPException) as error:asyncio.run(keitaro.request('GET','offers'))
     assert error.value.status_code==502
 
-def test_partial_creation_archived(client,monkeypatch):
+def test_partial_creation_kept_disabled(client,monkeypatch):
     client.put('/api/settings',json={'domain_id':1,'group_id':1,'traffic_source_id':1})
     original=keitaro.request
     async def fail(method,path,payload=None):
@@ -48,4 +48,6 @@ def test_partial_creation_archived(client,monkeypatch):
     monkeypatch.setattr(keitaro,'request',fail)
     result=client.post('/api/campaigns',json={'name':'Partial','geo':['AU'],'offer_id':3749})
     assert result.status_code==502
-    assert client.get('/api/campaigns').json()==[]
+    campaigns=client.get('/api/campaigns').json()
+    assert len(campaigns)==1
+    assert campaigns[0]['state']=='disabled'

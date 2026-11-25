@@ -18,6 +18,8 @@ def test_creation_routing(client, campaign):
     geo, offers = sorted(streams,key=lambda x:x['position'])
     assert geo['filters']==[{'name':'country','mode':'accept','payload':['AU','MX']}]
     assert geo['action_payload']=='https://google.com'
+    assert geo['type']=='regular'
+    assert offers['type']=='default'
     assert offers['offers']==[{'offer_id':3749,'share':100,'state':'active'}]
     created = client.get('/api/campaigns').json()[0]
     assert (created['domain_id'],created['group_id'],created['traffic_source_id'])==(1,1,1)

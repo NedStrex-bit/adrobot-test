@@ -103,15 +103,15 @@ async def create_campaign(data: CreateCampaign):
         cid = campaign['id']
         try:
             await keitaro.request('POST', 'streams', {'campaign_id': cid, 'name': 'Geo → Google', 'type': 'regular', 'position': 1, 'state': 'active', 'collect_clicks': True, 'schema': 'redirect', 'action_type': 'http', 'action_payload': 'https://google.com', 'filter_or': False, 'filters': [{'name': 'country', 'mode': 'accept', 'payload': data.geo}]})
-            await keitaro.request('POST', 'streams', {'campaign_id': cid, 'name': 'Offers', 'type': 'regular', 'position': 2, 'state': 'active', 'collect_clicks': True, 'action_type': 'http', 'schema': 'landings', 'landings': [], 'offers': [{'offer_id': data.offer_id, 'share': 100, 'state': 'active'}]})
+            await keitaro.request('POST', 'streams', {'campaign_id': cid, 'name': 'Offers', 'type': 'default', 'position': 2, 'state': 'active', 'collect_clicks': True, 'action_type': 'http', 'schema': 'landings', 'landings': [], 'offers': [{'offer_id': data.offer_id, 'share': 100, 'state': 'active'}]})
             campaign = await keitaro.request('PUT', f'campaigns/{cid}', {'state': 'active'})
         except HTTPException:
-            # Archive partial campaign. Ambiguous network failures still require inspection.
+            # Preserve partial campaign: the training server permanently deletes on DELETE.
             try:
-                await keitaro.request('DELETE', f'campaigns/{cid}')
-                message = f'Не удалось создать потоки. Кампания #{cid} отправлена в архив; проверьте её перед повтором.'
+                await keitaro.request('PUT', f'campaigns/{cid}', {'state': 'disabled'})
+                message = f'Не удалось завершить создание. Кампания #{cid} выключена и сохранена для проверки.'
             except HTTPException:
-                message = f'Не удалось создать потоки и архивировать кампанию #{cid}. Проверьте её в Keitaro.'
+                message = f'Не удалось завершить создание и подтвердить выключение кампании #{cid}. Проверьте её в Keitaro.'
             raise HTTPException(502, message)
         return campaign
 
