@@ -51,3 +51,19 @@ def test_partial_creation_kept_disabled(client,monkeypatch):
     campaigns=client.get('/api/campaigns').json()
     assert len(campaigns)==1
     assert campaigns[0]['state']=='disabled'
+
+@pytest.mark.parametrize('method,expected_calls',[('GET',2),('POST',1)])
+def test_read_retries_but_writes_do_not(monkeypatch,method,expected_calls):
+    real_client=httpx.AsyncClient
+    calls=[]
+    def handle(request):
+        calls.append(request.method)
+        if len(calls)==1: raise httpx.ConnectError('temporary connection failure')
+        return httpx.Response(200,json=[])
+    monkeypatch.setattr(settings,'demo_mode',False)
+    monkeypatch.setattr(settings,'keitaro_api_key','test-key')
+    monkeypatch.setattr(httpx,'AsyncClient',lambda **kwargs:real_client(transport=httpx.MockTransport(handle),**kwargs))
+    if method=='GET': assert asyncio.run(keitaro.request(method,'offers'))==[]
+    else:
+        with pytest.raises(HTTPException):asyncio.run(keitaro.request(method,'campaigns',{'name':'test'}))
+    assert len(calls)==expected_calls

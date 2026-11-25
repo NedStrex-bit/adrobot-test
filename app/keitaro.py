@@ -1,3 +1,4 @@
+import asyncio
 import copy
 import httpx
 from fastapi import HTTPException
@@ -17,15 +18,25 @@ async def request(method, path, payload=None):
         return demo(method, path, payload)
     if not settings.keitaro_api_key:
         raise HTTPException(503, 'Укажите KEITARO_API_KEY в .env')
-    try:
-        async with httpx.AsyncClient(timeout=25) as client:
-            response = await client.request(method, settings.keitaro_url.rstrip('/') + '/admin_api/v1/' + path, headers={'Api-Key': settings.keitaro_api_key}, json=payload)
-        if response.is_error:
-            # Do not leak tracker responses, URLs or credentials to the browser.
-            raise HTTPException(502, f'Keitaro вернул HTTP {response.status_code}. Операция не подтверждена; обновите данные перед повтором.')
-        return response.json() if response.content else None
-    except httpx.RequestError:
-        raise HTTPException(502, 'Keitaro недоступен. Результат операции может быть неизвестен; обновите данные перед повтором.')
+    attempts = 3 if method == 'GET' else 1
+    for attempt in range(attempts):
+        try:
+            async with httpx.AsyncClient(timeout=25) as client:
+                response = await client.request(method, settings.keitaro_url.rstrip('/') + '/admin_api/v1/' + path, headers={'Api-Key': settings.keitaro_api_key}, json=payload)
+            if method == 'GET' and response.status_code in (502, 503, 504) and attempt < attempts - 1:
+                await asyncio.sleep(0.3 * (attempt + 1))
+                continue
+            if response.is_error:
+                raise HTTPException(502, f'Keitaro вернул HTTP {response.status_code}. Обновите данные перед повтором.')
+            return response.json() if response.content else None
+        except httpx.RequestError:
+            if attempt < attempts - 1:
+                await asyncio.sleep(0.3 * (attempt + 1))
+                continue
+            message = ('Не удалось загрузить данные Keitaro после трёх попыток. Попробуйте обновить список.'
+                       if method == 'GET' else
+                       'Соединение с Keitaro прервалось. Результат операции может быть неизвестен; обновите данные перед повтором.')
+            raise HTTPException(502, message)
 
 def demo(method, path, payload):
     state = read('simulator') or {'campaigns': [], 'streams': [], 'next_id': 100}
